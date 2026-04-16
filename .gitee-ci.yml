@@ -6,7 +6,7 @@ trigger:
       - master
 
 steps:
-  - name: 登录服务器更新项目
+  - name: 登录服务器更新项目1
     uses: gitee/actions/ssh@v1
     with:
       host: ${{ secrets.SSH_HOST }}
