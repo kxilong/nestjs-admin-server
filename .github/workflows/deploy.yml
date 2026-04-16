@@ -17,7 +17,7 @@ jobs:
       - name: 配置 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       # 3. 安装后端依赖 + 打包
       - name: 安装后端依赖
