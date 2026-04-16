@@ -8,9 +8,13 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
 async function bootstrap() {
   if (process.env.NODE_ENV !== 'production') {
-    const a = process.env.JWT_ACCESS_EXPIRES_IN?.trim() ?? '(未设置，access 默认 15m)';
-    const r = process.env.JWT_REFRESH_EXPIRES_IN?.trim() ?? '(未设置，refresh 默认 7d)';
-    console.log(`[JWT] JWT_ACCESS_EXPIRES_IN=${a} | JWT_REFRESH_EXPIRES_IN=${r}`);
+    const a =
+      process.env.JWT_ACCESS_EXPIRES_IN?.trim() ?? '(未设置，access 默认 15m)';
+    const r =
+      process.env.JWT_REFRESH_EXPIRES_IN?.trim() ?? '(未设置，refresh 默认 7d)';
+    console.log(
+      `[JWT] JWT_ACCESS_EXPIRES_IN=${a} | JWT_REFRESH_EXPIRES_IN=${r}`,
+    );
     console.log(
       '[JWT] 修改 .env 后需重启进程；仅改代码不会重载环境变量。登录后才会签发新 access token。',
     );
@@ -38,7 +42,7 @@ async function bootstrap() {
   const config = new DocumentBuilder()
     .setTitle('Admin API')
     .setDescription('Admin API 文档')
-    .setVersion('1.0')
+    .setVersion('2.0')
     .addBearerAuth(
       { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
       'access-token',
