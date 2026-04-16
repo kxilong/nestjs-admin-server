@@ -1,0 +1,20 @@
+name: NestJS自动部署
+
+trigger:
+  push:
+    branches:
+      - main
+
+steps:
+  - name: 登录服务器更新项目
+    uses: gitee/actions/ssh@v1
+    with:
+      host: ${{ secrets.SSH_HOST }}
+      user: ${{ secrets.SSH_USER }}
+      key: ${{ secrets.SSH_PRIVATE_KEY }}
+      port: 22
+      script: |
+        cd ${{ secrets.PROJECT_PATH }}
+        git pull origin main
+        docker-compose down
+        docker-compose up -d --build
