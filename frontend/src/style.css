@@ -1,0 +1,33 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f5f7fa;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.page {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 32px 16px;
+}
+
+.container {
+  width: 100%;
+  max-width: 960px;
+}
+
+.mb16 {
+  margin-bottom: 16px;
+}
+
+a {
+  color: #1677ff;
+}

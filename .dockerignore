@@ -1,0 +1,23 @@
+# 依赖文件夹（容器里会重新安装，不用复制本地的）
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# 构建产物（容器里会重新构建，不用复制本地的）
+dist/
+
+# 环境变量（容器里会用docker-compose里的配置，不用复制本地的）
+.env
+.env.*
+
+# Git文件
+.git
+.gitignore
+
+# IDE配置
+.vscode/
+.idea/
+
+# 日志文件
+logs/
+*.log

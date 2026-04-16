@@ -1,0 +1,59 @@
+# 定义两个服务：后端app + 数据库db
+services:
+  # 1. NestJS后端服务
+  app:
+    # 构建当前目录的Dockerfile
+    build: .
+    # 构建后的镜像名称（便于复用和发布）
+    image: nestjs-admin-server-app:latest
+    # 容器名字（随便起，方便识别）
+    container_name: nestjs-app
+    # 端口映射：本地端口:容器端口（和你的NestJS端口一致）
+    ports:
+      - '3000:3000'
+    # 环境变量（给NestJS项目用的）
+    environment:
+      # 数据库连接地址：注意host是db（下面的服务名，容器内用服务名通信）
+      DATABASE_URL: 'postgresql://postgres:123456@db:5432/nest_prisma?schema=public'
+      # JWT密钥（和你本地的.env里的一致）
+      JWT_SECRET: 'access_secret_for_dev_change_me'
+      JWT_EXPIRES_IN: '24h'
+      NODE_ENV: 'production'
+    # 依赖关系：数据库健康后再启动后端，避免首启竞争
+    depends_on:
+      db:
+        condition: service_healthy
+    # 重启策略：容器退出自动重启
+    restart: always
+
+  # 2. PostgreSQL数据库服务
+  db:
+    # 用官方PostgreSQL镜像（选和你本地版本接近的，比如15/16）
+    image: postgres:15-alpine
+    container_name: postgres-db
+    ports:
+      # 本地端口:容器端口（本地用Navicat可以连这个端口）
+      - '5433:5432'
+    # 环境变量（配置PostgreSQL）
+    environment:
+      # 数据库名
+      POSTGRES_DB: nest_prisma
+      # 用户名（默认postgres）
+      POSTGRES_USER: postgres
+      # 密码（和上面DATABASE_URL里的一致，这里是123456）
+      POSTGRES_PASSWORD: 123456
+    # 数据卷：把数据库数据持久化到本地，容器删除数据也不丢
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # 健康检查：供app的depends_on判断数据库是否可用
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d nest_prisma']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: always
+
+# 定义数据卷（上面的db服务用）
+volumes:
+  postgres_data:
