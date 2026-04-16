@@ -23,6 +23,7 @@ jobs:
       - name: 安装后端依赖
         run: |
           npm install
+          npx prisma generate
           npm run build
 
       # 4. 安装前端依赖 + 打包
