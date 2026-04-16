@@ -1,0 +1,44 @@
+version: '1.0'
+name: nest-deploy
+displayName: nest自动部署
+triggers:
+  trigger: auto
+  push:
+    branches:
+      precise:
+        - master
+      include:
+        - '*'
+stages:
+  - name: stage-fecb4b9d
+    displayName: 未命名
+    strategy: naturally
+    trigger: auto
+    executor: []
+    steps:
+      - step: execute@docker
+        name: execute_by_docker
+        displayName: 基于镜像的脚本执行
+        certificate: ''
+        image: alpine:latest
+        command:
+          - '#!/bin/sh'
+          - '# 把私钥写入文件并设置权限'
+          - mkdir -p /root/.ssh
+          - echo "$SSH_PRIVATE_KEY" > /root/.ssh/id_ed25519
+          - chmod 600 /root/.ssh/id_ed25519
+          - ''
+          - '# 登录服务器执行部署命令（StrictHostKeyChecking=no 跳过主机验证）'
+          - ssh -o StrictHostKeyChecking=no $SSH_USER@$SSH_HOST << 'EOF'
+          - cd /home/ubuntu/nestjs-admin-server
+          - git pull origin master
+          - docker-compose down
+          - docker-compose up -d --build
+          - EOF
+        artifacts:
+          - name: BUILD_ARTIFACT
+            path:
+              - ./target
+        notify: []
+        strategy:
+          retry: '0'
