@@ -18,7 +18,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: 'false'
 
       # 3. 安装后端依赖 + 打包
       - name: 安装后端依赖
