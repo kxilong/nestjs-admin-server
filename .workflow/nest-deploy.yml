@@ -1,0 +1,48 @@
+version: '1.0'
+name: nest-deploy
+displayName: nest自动部署
+triggers:
+  trigger: auto
+  push:
+    branches:
+      precise:
+        - master
+      include:
+        - '*'
+stages:
+  - name: stage-fecb4b9d
+    displayName: 未命名
+    strategy: naturally
+    trigger: auto
+    executor: []
+    steps:
+      - step: execute@docker
+        name: execute_by_docker
+        displayName: 基于镜像的脚本执行
+        certificate: ''
+        image: alpine:latest
+        command:
+          - '# 安装依赖'
+          - apt update && apt install -y openssh-client sshpass
+          - ''
+          - '# 服务器信息（直接填你的，这是临时脚本，安全）'
+          - SERVER_IP="82.157.103.190"
+          - SERVER_USER="ubuntu"
+          - '# 你的服务器登录密码'
+          - SERVER_PASS="L72Q:S_6n!DsMZE"
+          - PROJECT_PATH="/home/ubuntu/nestjs-admin-server"
+          - ''
+          - '# 免密执行部署命令'
+          - sshpass -p $SERVER_PASS ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP << EOF
+          - cd $PROJECT_PATH
+          - git pull origin master
+          - docker-compose down
+          - docker-compose up -d --build
+          - EOF
+        artifacts:
+          - name: BUILD_ARTIFACT
+            path:
+              - ./target
+        notify: []
+        strategy:
+          retry: '0'
