@@ -1,0 +1,59 @@
+name: 自动部署 NestJS + 前端项目
+
+# 触发条件：代码 push 到 main 分支就自动部署
+on:
+  push:
+    branches: [master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 拉取 GitHub 最新代码
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # 2. 配置 Node.js 环境
+      - name: 配置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      # 3. 安装后端依赖 + 打包
+      - name: 安装后端依赖
+        run: |
+          npm install
+          npm run build
+
+      # 4. 安装前端依赖 + 打包
+      - name: 安装并打包前端
+        run: |
+          cd frontend
+          npm install
+          npm run build
+
+      # 5. 自动连接服务器 → 上传代码 → 重启服务
+      - name: 部署到服务器
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
+          script: |
+            # 进入项目目录
+            cd ${{ secrets.SERVER_DEPLOY_PATH }}
+
+            # 拉取最新代码
+            git pull origin master
+
+            # 重启后端 NestJS 服务（Docker 版本）
+            docker restart nestjs-app
+
+            # 复制前端打包文件到宝塔正确目录（你之前的前端路径）
+            cp -rf frontend/dist/* /www/wwwroot/frontend/dist
+
+            # 重载 Nginx
+            nginx -s reload
+
+            echo "✅ 自动化部署完成！"
