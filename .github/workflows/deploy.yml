@@ -1,6 +1,6 @@
 name: 自动部署 NestJS + 前端项目
 
-# 触发条件：代码 push 到 main 分支就自动部署
+# 触发条件：代码 push 到 master 分支自动部署
 on:
   push:
     branches: [master]
@@ -19,41 +19,50 @@ jobs:
         with:
           node-version: 22
 
-      # 3. 安装后端依赖 + 打包
-      - name: 安装后端依赖
+      # 3. 安装后端依赖 + 生成 Prisma 客户端 + 打包后端
+      - name: 安装后端依赖并打包
         run: |
           npm install
           npx prisma generate
           npm run build
 
-      # 4. 安装前端依赖 + 打包
+      # 4. 安装前端依赖 + 打包前端（云端生成 dist 文件）
       - name: 安装并打包前端
         run: |
           cd frontend
           npm install
           npm run build
 
-      # 5. 自动连接服务器 → 上传代码 → 重启服务
-      - name: 部署到服务器
+      # 5. 【关键修复】把云端打包好的前端文件传到服务器 Nginx 目录
+      - name: 上传前端 dist 文件到服务器
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
+          source: './frontend/dist/*' # 云端打包好的文件路径
+          target: '/www/wwwroot/frontend/dist' # 你的 Nginx 根目录（和截图一致）
+
+      # 6. 连接服务器 → 拉取后端代码 → 重启服务 → 重载 Nginx
+      - name: 部署后端并重启服务
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
           script: |
-            # 进入项目目录
-            cd ${{ secrets.SERVER_DEPLOY_PATH }}
-
-            # 拉取最新代码
+            # 进入后端项目目录，拉取最新代码
+            cd /home/ubuntu/nestjs-admin-server
             git pull origin master
 
             # 重启后端 NestJS 服务（Docker 版本）
             docker restart nestjs-app
 
-            # 复制前端打包文件到宝塔正确目录（你之前的前端路径）
-            cp -rf frontend/dist/* /www/wwwroot/frontend/dist
+            # 给上传的前端文件设置 Nginx 权限（防止 403/500 错误）
+            chown -R www:www /www/wwwroot/frontend/dist
+            chmod -R 755 /www/wwwroot/frontend/dist
 
-            # 重载 Nginx
+            # 重载 Nginx 配置，立刻生效
             nginx -s reload
 
-            echo "✅ 自动化部署完成！"
+            echo "✅ 自动化部署完成！前后端均已更新"
