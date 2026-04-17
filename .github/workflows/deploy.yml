@@ -8,24 +8,22 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      # 1. 拉取代码
       - name: 检出代码
         uses: actions/checkout@v4
 
-      # 2. 配置 Node.js
       - name: 配置 Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      # 3. 后端构建（云端构建，不用服务器装任何东西）
+      # 云端构建后端（包含 SuperAdminBootstrapService）
       - name: 安装后端依赖并打包
         run: |
           npm install
           npx prisma generate
           npm run build
 
-      # 4. 前端构建
+      # 云端构建前端
       - name: 安装并打包前端
         run: |
           cd frontend
@@ -35,8 +33,8 @@ jobs:
           tar -czf ../../frontend-dist.tar.gz *
           cd ../..
 
-      # ===================== 核心优化：上传云端构建的后端dist =====================
-      - name: 上传 后端dist + 前端压缩包
+      # 同时上传 后端dist + 前端压缩包 到服务器
+      - name: 上传文件到服务器
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -45,7 +43,6 @@ jobs:
           source: 'dist/,frontend-dist.tar.gz'
           target: '/tmp/'
 
-      # 服务器部署（全自动，无任何依赖）
       - name: 部署前后端
         uses: appleboy/ssh-action@master
         with:
@@ -58,19 +55,14 @@ jobs:
             sudo tar -xzf /tmp/frontend-dist.tar.gz -C /www/wwwroot/frontend/dist/
             sudo chown -R www:www /www/wwwroot/frontend/
 
-            # 2. 强制同步 最新后端代码 到服务器宿主机
-            cd /home/ubuntu/nestjs-admin-server
-            git fetch --all
-            git reset --hard origin/master
-
-            # 3. 用云端构建好的dist 覆盖Docker容器（关键！）
+            # 2. 同步云端构建的后端dist到容器（关键！）
             docker cp /tmp/dist/. nestjs-app:/app/dist/
 
-            # 4. 重启容器，加载新代码
+            # 3. 重启容器，加载新代码
             docker restart nestjs-app
 
-            # 5. 清理临时文件
+            # 4. 清理临时文件
             sudo rm -rf /tmp/dist /tmp/frontend-dist.tar.gz
 
             nginx -s reload
-            echo "✅ 部署完成！超管初始化已自动执行"
+            echo "✅ 部署完成"
