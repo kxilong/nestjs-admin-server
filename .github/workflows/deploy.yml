@@ -1,6 +1,5 @@
 name: 自动部署 NestJS + 前端项目
 
-# 触发条件：代码 push 到 master 分支自动部署
 on:
   push:
     branches: [master]
@@ -9,60 +8,75 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      # 1. 拉取 GitHub 最新代码
+      # 1. 拉取代码
       - name: 检出代码
         uses: actions/checkout@v4
 
-      # 2. 配置 Node.js 环境
+      # 2. 配置 Node.js
       - name: 配置 Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      # 3. 安装后端依赖 + 生成 Prisma 客户端 + 打包后端
+      # 3. 后端构建
       - name: 安装后端依赖并打包
         run: |
           npm install
           npx prisma generate
           npm run build
 
-      # 4. 安装前端依赖 + 打包前端（云端生成 dist 文件）
+      # 4. 前端构建（关键修改：打包成单个tar文件）
       - name: 安装并打包前端
         run: |
           cd frontend
           npm install
           npm run build
+          # 进入dist目录，打包里面的文件（不带dist目录结构）
+          cd dist
+          tar -czf ../../frontend-dist.tar.gz *
+          cd ../..
 
-      # 5. 【关键修复】把云端打包好的前端文件传到服务器 Nginx 目录
-      - name: 上传前端 dist 文件到服务器
+      # 5. 确认打包文件存在
+      - name: 检查前端打包文件
+        run: ls -la frontend-dist.tar.gz
+
+      # 6. 上传打包文件到服务器（稳定上传单个文件）
+      - name: 上传前端打包文件
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
-          source: './frontend/dist/*' # 云端打包好的文件路径
-          target: '/www/wwwroot/frontend/dist' # 你的 Nginx 根目录（和截图一致）
+          source: 'frontend-dist.tar.gz'
+          target: '/tmp/'
 
-      # 6. 连接服务器 → 拉取后端代码 → 重启服务 → 重载 Nginx
-      - name: 部署后端并重启服务
+      # 7. 服务器端解压 + 部署 + 重启服务
+      - name: 部署后端并更新前端
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
           script: |
-            # 进入后端项目目录，拉取最新代码
+            # 清空旧的前端文件
+            sudo rm -rf /www/wwwroot/frontend/dist/*
+
+            # 解压新文件到目标目录
+            sudo tar -xzf /tmp/frontend-dist.tar.gz -C /www/wwwroot/frontend/dist/
+
+            # 设置Nginx权限
+            sudo chown -R www:www /www/wwwroot/frontend/
+            sudo chmod -R 755 /www/wwwroot/frontend/
+
+            # 删除临时文件
+            sudo rm -f /tmp/frontend-dist.tar.gz
+
+            # 拉取后端代码并重启服务
             cd /home/ubuntu/nestjs-admin-server
             git pull origin master
-
-            # 重启后端 NestJS 服务（Docker 版本）
             docker restart nestjs-app
 
-            # 给上传的前端文件设置 Nginx 权限（防止 403/500 错误）
-            chown -R www:www /www/wwwroot/frontend/dist
-            chmod -R 755 /www/wwwroot/frontend/dist
-
-            # 重载 Nginx 配置，立刻生效
+            # 重载Nginx
             nginx -s reload
 
-            echo "✅ 自动化部署完成！前后端均已更新"
+            echo "✅ 部署完成！前后端均已更新"
