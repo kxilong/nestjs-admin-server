@@ -24,7 +24,7 @@ export class SuperAdminBootstrapService implements OnModuleInit {
       return;
     }
 
-    console.log('🔍 开始执行超管初始化逻辑...');
+    console.log('🔍 开始执行超管初始化逻辑loading...');
 
     await this.permissionService.syncCatalog();
 
