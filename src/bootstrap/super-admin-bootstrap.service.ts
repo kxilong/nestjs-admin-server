@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { hash } from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { PermissionService } from '../permission/permission.service';
@@ -6,8 +6,6 @@ import { SUPER_ADMIN_ROLE_CODE } from '../constants/permission.definitions';
 
 @Injectable()
 export class SuperAdminBootstrapService implements OnModuleInit {
-  private readonly logger = new Logger(SuperAdminBootstrapService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly permissionService: PermissionService,
@@ -25,6 +23,8 @@ export class SuperAdminBootstrapService implements OnModuleInit {
     if (superAdminCount > 0) {
       return;
     }
+
+    console.log('🔍 开始执行超管初始化逻辑...');
 
     await this.permissionService.syncCatalog();
 
@@ -73,8 +73,9 @@ export class SuperAdminBootstrapService implements OnModuleInit {
       update: {},
     });
 
-    this.logger.warn(
-      `数据库中无超级管理员：已创建默认用户「${adminName}」（密码来自 SEED_ADMIN_PASSWORD 或默认 Admin@123，生产环境请尽快修改）。`,
+    console.log(`✅ 已自动创建默认超管用户 ${adminName}`);
+    console.log(
+      '（密码来自 SEED_ADMIN_PASSWORD 或默认 Admin@123，生产环境请尽快修改）',
     );
   }
 }
