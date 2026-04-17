@@ -14,6 +14,7 @@ import { UserController } from './user/user.controller';
 import { UserService } from './user/user.service';
 import { RbacService } from './rbac/rbac.service';
 import { PermissionsGuard } from './rbac/permissions.guard';
+import { SuperAdminBootstrapService } from './bootstrap/super-admin-bootstrap.service';
 
 @Module({
   imports: [],
@@ -35,6 +36,7 @@ import { PermissionsGuard } from './rbac/permissions.guard';
     UserService,
     RbacService,
     PermissionsGuard,
+    SuperAdminBootstrapService,
   ],
 })
 export class AppModule {}
