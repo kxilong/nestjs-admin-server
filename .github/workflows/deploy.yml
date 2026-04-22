@@ -57,6 +57,7 @@ jobs:
 
             APP_DIR="/home/ubuntu/nestjs-admin-server"
             FRONT_DIST_DIR="$APP_DIR/frontend/dist"
+            ALT_FRONT_DIST_DIR="/www/wwwroot/frontend/dist"
             BACK_DIST_DIR="$APP_DIR/dist"
 
             # 0. 准备目录
@@ -65,6 +66,11 @@ jobs:
             # 1. 更新服务器上的前端目录（你在面板看到的目录）
             sudo rm -rf "$FRONT_DIST_DIR"/*
             sudo tar -xzf /tmp/frontend-dist.tar.gz -C "$FRONT_DIST_DIR"
+            # 兼容宝塔常见站点目录（若存在则同步一份，避免 Nginx 指向旧目录）
+            if [ -d "$ALT_FRONT_DIST_DIR" ]; then
+              sudo rm -rf "$ALT_FRONT_DIST_DIR"/*
+              sudo tar -xzf /tmp/frontend-dist.tar.gz -C "$ALT_FRONT_DIST_DIR"
+            fi
 
             # 2. 更新服务器上的后端 dist 目录（便于直接看到已更新）
             sudo rm -rf "$BACK_DIST_DIR"/*
@@ -132,6 +138,11 @@ jobs:
             } | sudo tee "$APP_DIR/DEPLOY_VERSION.txt" > /dev/null
             sudo cp "$APP_DIR/DEPLOY_VERSION.txt" "$FRONT_DIST_DIR/DEPLOY_VERSION.txt"
             sudo cp "$APP_DIR/DEPLOY_VERSION.txt" "$BACK_DIST_DIR/DEPLOY_VERSION.txt"
+            if [ -d "$ALT_FRONT_DIST_DIR" ]; then
+              sudo cp "$APP_DIR/DEPLOY_VERSION.txt" "$ALT_FRONT_DIST_DIR/DEPLOY_VERSION.txt"
+            fi
+            echo "当前部署版本："
+            sudo cat "$APP_DIR/DEPLOY_VERSION.txt"
 
             # 6. 清理临时文件
             sudo rm -rf /tmp/dist /tmp/frontend-dist.tar.gz
