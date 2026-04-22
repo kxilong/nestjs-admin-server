@@ -82,7 +82,15 @@ jobs:
               CONTAINER_ID="$(sudo docker ps -aq --filter label=com.docker.compose.service=app | head -n 1)"
             fi
             if [ -z "$CONTAINER_ID" ]; then
-              echo "错误：未找到后端 Docker 容器（name=nestjs-app 或 compose service=app），部署终止。"
+              echo "未找到后端容器，尝试通过 docker compose 拉起 app..."
+              EMPTY_ENV_FILE="/tmp/empty-compose.env"
+              sudo sh -c "printf '' > \"$EMPTY_ENV_FILE\""
+              sudo docker compose --env-file "$EMPTY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d --build app
+              CONTAINER_ID="$(sudo docker compose --env-file "$EMPTY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" ps -q app | head -n 1)"
+              sudo rm -f "$EMPTY_ENV_FILE"
+            fi
+            if [ -z "$CONTAINER_ID" ]; then
+              echo "错误：未找到后端 Docker 容器，且自动拉起失败，部署终止。"
               sudo docker ps -a || true
               exit 1
             fi
