@@ -31,3 +31,18 @@ body {
 a {
   color: #1677ff;
 }
+
+.app-version {
+  position: fixed;
+  right: 12px;
+  bottom: 8px;
+  z-index: 9999;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 12px;
+  line-height: 18px;
+  user-select: none;
+  pointer-events: none;
+}

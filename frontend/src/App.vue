@@ -2,6 +2,7 @@
 import { onMounted } from 'vue';
 import zhCN from 'ant-design-vue/es/locale/zh_CN';
 import { useAuth } from '@/composables/useAuth';
+import { APP_VERSION } from '@/config';
 
 const { accessToken, refreshProfile } = useAuth();
 
@@ -17,5 +18,6 @@ onMounted(() => {
 <template>
   <a-config-provider :locale="zhCN">
     <router-view />
+    <div class="app-version">版本 {{ APP_VERSION }}</div>
   </a-config-provider>
 </template>

@@ -7,6 +7,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      APP_DIR: /home/ubuntu/nestjs-admin-server
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -28,6 +30,7 @@ jobs:
         run: |
           cd frontend
           npm install
+          export VITE_APP_VERSION="${GITHUB_SHA::8}"
           npm run build
           cd dist
           tar -czf ../../frontend-dist.tar.gz *
@@ -50,18 +53,44 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
           script: |
-            # 1. 部署前端
-            sudo rm -rf /www/wwwroot/frontend/dist/*
-            sudo tar -xzf /tmp/frontend-dist.tar.gz -C /www/wwwroot/frontend/dist/
-            sudo chown -R www:www /www/wwwroot/frontend/
+            set -e
 
-            # 2. 同步云端构建的后端dist到容器（关键！）
+            APP_DIR="/home/ubuntu/nestjs-admin-server"
+            FRONT_DIST_DIR="$APP_DIR/frontend/dist"
+            BACK_DIST_DIR="$APP_DIR/dist"
+
+            # 0. 准备目录
+            mkdir -p "$FRONT_DIST_DIR" "$BACK_DIST_DIR"
+
+            # 1. 更新服务器上的前端目录（你在面板看到的目录）
+            rm -rf "$FRONT_DIST_DIR"/*
+            tar -xzf /tmp/frontend-dist.tar.gz -C "$FRONT_DIST_DIR"
+
+            # 2. 更新服务器上的后端 dist 目录（便于直接看到已更新）
+            rm -rf "$BACK_DIST_DIR"/*
+            cp -r /tmp/dist/. "$BACK_DIST_DIR/"
+
+            # 3. 同步后端 dist 到运行中的容器，并重启生效
             docker cp /tmp/dist/. nestjs-app:/app/dist/
-
-            # 3. 重启容器，加载新代码
             docker restart nestjs-app
 
-            # 4. 清理临时文件
+            # 4. 前端目录权限（宝塔/nginx 常见用户）
+            sudo chown -R www:www "$APP_DIR/frontend" || true
+
+            # 5. 记录部署版本（便于排查“线上是不是最新代码”）
+            DEPLOY_TIME="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+            COMMIT_SHA="${{ github.sha }}"
+            SHORT_SHA="$(echo "$COMMIT_SHA" | cut -c1-8)"
+            {
+              echo "commit_sha=$COMMIT_SHA"
+              echo "short_sha=$SHORT_SHA"
+              echo "branch=master"
+              echo "deployed_at_utc=$DEPLOY_TIME"
+            } | tee "$APP_DIR/DEPLOY_VERSION.txt" > /dev/null
+            cp "$APP_DIR/DEPLOY_VERSION.txt" "$FRONT_DIST_DIR/DEPLOY_VERSION.txt"
+            cp "$APP_DIR/DEPLOY_VERSION.txt" "$BACK_DIST_DIR/DEPLOY_VERSION.txt"
+
+            # 6. 清理临时文件
             sudo rm -rf /tmp/dist /tmp/frontend-dist.tar.gz
 
             nginx -s reload
