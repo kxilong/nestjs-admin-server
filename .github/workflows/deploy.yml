@@ -85,12 +85,24 @@ jobs:
               echo "未找到后端容器，尝试通过 docker compose 拉起 app..."
               EMPTY_ENV_FILE="/tmp/empty-compose.env"
               sudo sh -c "printf '' > \"$EMPTY_ENV_FILE\""
-              sudo docker compose --env-file "$EMPTY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d --build app
+              if ! sudo docker compose --env-file "$EMPTY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d --build app; then
+                echo "首次拉起 app 失败，尝试释放 3000 端口后重试..."
+                PORT_CONFLICT_CONTAINERS="$(sudo docker ps -q --filter publish=3000)"
+                if [ -n "$PORT_CONFLICT_CONTAINERS" ]; then
+                  for CID in $PORT_CONFLICT_CONTAINERS; do
+                    echo "停止占用 3000 端口的容器: $CID"
+                    sudo docker stop "$CID" || true
+                  done
+                fi
+                sudo docker compose --env-file "$EMPTY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d --build app
+              fi
               CONTAINER_ID="$(sudo docker compose --env-file "$EMPTY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" ps -q app | head -n 1)"
               sudo rm -f "$EMPTY_ENV_FILE"
             fi
             if [ -z "$CONTAINER_ID" ]; then
               echo "错误：未找到后端 Docker 容器，且自动拉起失败，部署终止。"
+              echo "当前 3000 端口占用情况："
+              sudo ss -ltnp | awk 'NR==1 || /:3000/'
               sudo docker ps -a || true
               exit 1
             fi
