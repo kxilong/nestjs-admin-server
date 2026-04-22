@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -16,6 +17,8 @@ import { compare, hash } from 'bcryptjs';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -227,27 +230,47 @@ export class AuthService {
   }
 
   private get accessExpiresIn(): number | string {
-    return this.parseExpiresIn(process.env.JWT_ACCESS_EXPIRES_IN, '15m');
+    return this.parseExpiresIn(
+      process.env.JWT_ACCESS_EXPIRES_IN,
+      '15m',
+      'JWT_ACCESS_EXPIRES_IN',
+    );
   }
 
   private get refreshExpiresIn(): number | string {
-    return this.parseExpiresIn(process.env.JWT_REFRESH_EXPIRES_IN, '7d');
+    return this.parseExpiresIn(
+      process.env.JWT_REFRESH_EXPIRES_IN,
+      '7d',
+      'JWT_REFRESH_EXPIRES_IN',
+    );
   }
 
   private parseExpiresIn(
     value: string | undefined,
     fallback: string,
+    envName: string,
   ): number | string {
     const raw = value?.trim();
     if (!raw) {
       return fallback;
     }
 
+    // 兼容误写成带引号的值，例如 "\"24h\""、"'15m'"
+    const normalized = raw.replace(/^['"`](.*)['"`]$/, '$1').trim();
+
     // 纯数字按「秒」传给 jsonwebtoken（与官方示例一致）
-    if (/^\d+$/.test(raw)) {
-      return Number(raw);
+    if (/^\d+$/.test(normalized)) {
+      return Number(normalized);
     }
 
-    return raw;
+    // 支持常见时长写法：1d / 20h / 15m / 60s 等
+    if (/^\d+(\.\d+)?\s*(ms|s|m|h|d|w|y)$/i.test(normalized)) {
+      return normalized.replace(/\s+/g, '');
+    }
+
+    this.logger.warn(
+      `${envName}=${JSON.stringify(raw)} 格式非法，已回退默认值 ${fallback}`,
+    );
+    return fallback;
   }
 }
