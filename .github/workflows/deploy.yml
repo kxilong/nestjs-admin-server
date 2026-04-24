@@ -150,7 +150,8 @@ jobs:
           else
             sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d db
           fi
-          sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d --build app
+          # 不在服务器远程构建镜像，避免卡在 build/npm install；仅启动容器并覆盖 dist 发布
+          sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d app
 
           CONTAINER_ID="$(sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" ps -q app | head -n 1)"
           if [ -z "$CONTAINER_ID" ]; then
