@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
+  RobotOutlined,
   DashboardOutlined,
   LogoutOutlined,
   SafetyOutlined,
@@ -98,6 +99,16 @@ function openSwagger() {
             <SafetyOutlined />
           </template>
           账号安全
+        </a-menu-item>
+        <a-menu-item
+          v-if="can('system:ai:chat')"
+          key="/admin/ai-chat"
+          @click="router.push({ name: 'admin-ai-chat' })"
+        >
+          <template #icon>
+            <RobotOutlined />
+          </template>
+          AI 对话
         </a-menu-item>
       </a-menu>
     </a-layout-sider>

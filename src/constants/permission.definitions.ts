@@ -20,6 +20,10 @@ export const PERMISSION_DEFINITIONS: Record<
     name: '分配用户角色',
     description: 'PATCH /users/:id/roles',
   },
+  'system:ai:chat': {
+    name: 'AI 对话',
+    description: 'POST /ai/chat/stream',
+  },
 };
 
 export const SUPER_ADMIN_ROLE_CODE = 'super_admin';

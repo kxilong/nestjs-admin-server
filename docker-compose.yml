@@ -14,14 +14,21 @@ services:
     # 环境变量（给NestJS项目用的）
     environment:
       # 数据库连接地址：注意host是db（下面的服务名，容器内用服务名通信）
-      DATABASE_URL: 'postgresql://postgres:123456@db:5432/nest_prisma?schema=public'
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:123456@db:5432/nest_prisma?schema=public}
       # Redis（缓存、分布式锁、限流计数等）
-      REDIS_HOST: redis
-      REDIS_PORT: '6379'
-      # JWT密钥（和你本地的.env里的一致）
-      JWT_SECRET: 'access_secret_for_dev_change_me'
-      JWT_EXPIRES_IN: '24h'
-      NODE_ENV: 'production'
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      # JWT（新版变量名）
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-access_secret_for_dev_change_me}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-refresh_secret_for_dev_change_me}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-24h}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-604800}
+      # AI（千问/百炼）
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-qwen3.5-122b-a10b}
+      DASHSCOPE_BASE_URL: ${DASHSCOPE_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-200}
+      NODE_ENV: ${NODE_ENV:-production}
     # 依赖关系：数据库健康后再启动后端，避免首启竞争
     depends_on:
       redis:

@@ -18,6 +18,8 @@ import { RbacService } from './rbac/rbac.service';
 import { PermissionsGuard } from './rbac/permissions.guard';
 import { SuperAdminBootstrapService } from './bootstrap/super-admin-bootstrap.service';
 import { RedisModule } from './redis/redis.module';
+import { AiController } from './ai/ai.controller';
+import { AiService } from './ai/ai.service';
 
 @Module({
   imports: [
@@ -39,6 +41,7 @@ import { RedisModule } from './redis/redis.module';
     RoleController,
     PermissionController,
     UserController,
+    AiController,
   ],
   providers: [
     AppService,
@@ -52,6 +55,7 @@ import { RedisModule } from './redis/redis.module';
     RbacService,
     PermissionsGuard,
     SuperAdminBootstrapService,
+    AiService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })

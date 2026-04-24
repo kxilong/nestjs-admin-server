@@ -54,6 +54,12 @@ const router = createRouter({
           component: () => import('@/views/SecurityView.vue'),
           meta: { title: '账号安全' },
         },
+        {
+          path: 'ai-chat',
+          name: 'admin-ai-chat',
+          component: () => import('@/views/AiChatView.vue'),
+          meta: { title: 'AI 对话' },
+        },
       ],
     },
     {

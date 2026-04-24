@@ -9,6 +9,18 @@ jobs:
     runs-on: ubuntu-latest
     env:
       APP_DIR: /home/ubuntu/nestjs-admin-server
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      REDIS_HOST: ${{ secrets.REDIS_HOST }}
+      REDIS_PORT: ${{ secrets.REDIS_PORT }}
+      JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
+      JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+      JWT_ACCESS_EXPIRES_IN: ${{ secrets.JWT_ACCESS_EXPIRES_IN }}
+      JWT_REFRESH_EXPIRES_IN: ${{ secrets.JWT_REFRESH_EXPIRES_IN }}
+      DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
+      AI_MODEL: qwen3.5-122b-a10b
+      DASHSCOPE_BASE_URL: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+      THROTTLE_LIMIT: ${{ secrets.THROTTLE_LIMIT }}
+      NODE_ENV: production
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -52,6 +64,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
+          envs: APP_DIR,DATABASE_URL,REDIS_HOST,REDIS_PORT,JWT_ACCESS_SECRET,JWT_REFRESH_SECRET,JWT_ACCESS_EXPIRES_IN,JWT_REFRESH_EXPIRES_IN,DASHSCOPE_API_KEY,AI_MODEL,DASHSCOPE_BASE_URL,THROTTLE_LIMIT,NODE_ENV
           script: |
             set -e
 
@@ -59,8 +72,21 @@ jobs:
             FRONT_DIST_DIR="$APP_DIR/frontend/dist"
             ALT_FRONT_DIST_DIR="/www/wwwroot/frontend/dist"
             BACK_DIST_DIR="$APP_DIR/dist"
-            EMPTY_ENV_FILE="/tmp/empty-compose.env"
-            sudo sh -c "printf '' > \"$EMPTY_ENV_FILE\""
+            DEPLOY_ENV_FILE="/tmp/nestjs-admin-deploy.env"
+            sudo sh -c "cat > \"$DEPLOY_ENV_FILE\" <<'EOF'
+            DATABASE_URL=${DATABASE_URL}
+            REDIS_HOST=${REDIS_HOST}
+            REDIS_PORT=${REDIS_PORT}
+            JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
+            JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+            JWT_ACCESS_EXPIRES_IN=${JWT_ACCESS_EXPIRES_IN}
+            JWT_REFRESH_EXPIRES_IN=${JWT_REFRESH_EXPIRES_IN}
+            DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+            AI_MODEL=${AI_MODEL}
+            DASHSCOPE_BASE_URL=${DASHSCOPE_BASE_URL}
+            THROTTLE_LIMIT=${THROTTLE_LIMIT}
+            NODE_ENV=${NODE_ENV}
+            EOF"
 
             # 0. 准备目录
             sudo mkdir -p "$FRONT_DIST_DIR" "$BACK_DIST_DIR"
@@ -79,8 +105,8 @@ jobs:
             sudo cp -r /tmp/dist/. "$BACK_DIST_DIR/"
 
             # 2.1 先确保数据库容器可用（避免 app 启动时 Prisma P1001）
-            sudo docker compose --env-file "$EMPTY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d db
-            DB_CONTAINER_ID="$(sudo docker compose --env-file "$EMPTY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" ps -q db | head -n 1)"
+            sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d redis db
+            DB_CONTAINER_ID="$(sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" ps -q db | head -n 1)"
             if [ -z "$DB_CONTAINER_ID" ]; then
               DB_CONTAINER_ID="$(sudo docker ps -aq --filter name=postgres-db | head -n 1)"
             fi
@@ -129,7 +155,7 @@ jobs:
             fi
             if [ -z "$CONTAINER_ID" ]; then
               echo "未找到后端容器，尝试通过 docker compose 拉起 app..."
-              if ! sudo docker compose --env-file "$EMPTY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d --build app; then
+              if ! sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d --build app; then
                 echo "首次拉起 app 失败，尝试释放 3000 端口后重试..."
                 PORT_CONFLICT_CONTAINERS="$(sudo docker ps -q --filter publish=3000)"
                 if [ -n "$PORT_CONFLICT_CONTAINERS" ]; then
@@ -138,9 +164,9 @@ jobs:
                     sudo docker stop "$CID" || true
                   done
                 fi
-                sudo docker compose --env-file "$EMPTY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d --build app
+                sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d --build app
               fi
-              CONTAINER_ID="$(sudo docker compose --env-file "$EMPTY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" ps -q app | head -n 1)"
+              CONTAINER_ID="$(sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" ps -q app | head -n 1)"
             fi
             if [ -z "$CONTAINER_ID" ]; then
               echo "错误：未找到后端 Docker 容器，且自动拉起失败，部署终止。"
@@ -194,7 +220,7 @@ jobs:
             sudo cat "$APP_DIR/DEPLOY_VERSION.txt"
 
             # 6. 清理临时文件
-            sudo rm -f "$EMPTY_ENV_FILE"
+            sudo rm -f "$DEPLOY_ENV_FILE"
             sudo rm -rf /tmp/dist /tmp/frontend-dist.tar.gz
 
             sudo nginx -s reload
