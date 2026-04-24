@@ -15,15 +15,27 @@ services:
     environment:
       # 数据库连接地址：注意host是db（下面的服务名，容器内用服务名通信）
       DATABASE_URL: 'postgresql://postgres:123456@db:5432/nest_prisma?schema=public'
+      # Redis（缓存、分布式锁、限流计数等）
+      REDIS_HOST: redis
+      REDIS_PORT: '6379'
       # JWT密钥（和你本地的.env里的一致）
       JWT_SECRET: 'access_secret_for_dev_change_me'
       JWT_EXPIRES_IN: '24h'
       NODE_ENV: 'production'
     # 依赖关系：数据库健康后再启动后端，避免首启竞争
     depends_on:
+      redis:
+        condition: service_started
       db:
         condition: service_healthy
     # 重启策略：容器退出自动重启
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis-cache
+    ports:
+      - '6379:6379'
     restart: always
 
   # 2. PostgreSQL数据库服务

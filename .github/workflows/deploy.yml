@@ -107,7 +107,7 @@ jobs:
             fi
 
             # 2.1 强制 Docker 接管 3000 端口（清理 PM2/旧进程占用）
-            if sudo ss -ltnp | awk '/:3000/' | rg -q 'PM2|node'; then
+            if sudo ss -ltnp | awk '/:3000/' | grep -Eq 'PM2|node'; then
               echo "检测到 PM2/Node 占用 3000，先停止 PM2..."
               if command -v pm2 >/dev/null 2>&1; then
                 pm2 delete all || true
