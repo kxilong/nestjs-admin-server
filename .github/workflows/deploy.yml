@@ -48,15 +48,29 @@ jobs:
           cd dist
           tar -czf ../../frontend-dist.tar.gz *
           cd ../..
+          tar -czf deploy-bundle.tar.gz backend-dist.tar.gz frontend-dist.tar.gz docker-compose.yml
 
-      # 同时上传 后端dist + 前端压缩包 到服务器
-      - name: 上传文件到服务器
+      # 上传单个发布包（第1次）
+      - name: 上传发布包到服务器（第一次）
+        id: scp_first
+        uses: appleboy/scp-action@master
+        continue-on-error: true
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
+          source: 'deploy-bundle.tar.gz'
+          target: '/tmp/'
+
+      # 上传失败时自动重试一次（网络偶发抖动）
+      - name: 上传发布包到服务器（重试）
+        if: steps.scp_first.outcome == 'failure'
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
-          source: 'backend-dist.tar.gz,frontend-dist.tar.gz,docker-compose.yml'
+          source: 'deploy-bundle.tar.gz'
           target: '/tmp/'
 
       - name: 部署前后端
@@ -74,6 +88,9 @@ jobs:
             ALT_FRONT_DIST_DIR="/www/wwwroot/frontend/dist"
             BACK_DIST_DIR="$APP_DIR/dist"
             DEPLOY_ENV_FILE="/tmp/nestjs-admin-deploy.env"
+            sudo rm -rf /tmp/deploy-bundle
+            sudo mkdir -p /tmp/deploy-bundle
+            sudo tar -xzf /tmp/deploy-bundle.tar.gz -C /tmp/deploy-bundle
             sudo sh -c "cat > \"$DEPLOY_ENV_FILE\" <<'EOF'
             DATABASE_URL=${DATABASE_URL}
             REDIS_HOST=${REDIS_HOST}
@@ -90,24 +107,24 @@ jobs:
             EOF"
 
             # 0.1 同步 compose 文件，避免仓库与服务器配置漂移
-            sudo cp /tmp/docker-compose.yml "$APP_DIR/docker-compose.yml"
+            sudo cp /tmp/deploy-bundle/docker-compose.yml "$APP_DIR/docker-compose.yml"
 
             # 0. 准备目录
             sudo mkdir -p "$FRONT_DIST_DIR" "$BACK_DIST_DIR"
 
             # 1. 更新服务器上的前端目录（你在面板看到的目录）
             sudo rm -rf "$FRONT_DIST_DIR"/*
-            sudo tar -xzf /tmp/frontend-dist.tar.gz -C "$FRONT_DIST_DIR"
+            sudo tar -xzf /tmp/deploy-bundle/frontend-dist.tar.gz -C "$FRONT_DIST_DIR"
             # 兼容宝塔常见站点目录（若存在则同步一份，避免 Nginx 指向旧目录）
             if [ -d "$ALT_FRONT_DIST_DIR" ]; then
               sudo rm -rf "$ALT_FRONT_DIST_DIR"/*
-              sudo tar -xzf /tmp/frontend-dist.tar.gz -C "$ALT_FRONT_DIST_DIR"
+              sudo tar -xzf /tmp/deploy-bundle/frontend-dist.tar.gz -C "$ALT_FRONT_DIST_DIR"
             fi
 
             # 2. 更新服务器上的后端 dist 目录（便于直接看到已更新）
             sudo rm -rf /tmp/backend-dist
             sudo mkdir -p /tmp/backend-dist
-            sudo tar -xzf /tmp/backend-dist.tar.gz -C /tmp/backend-dist
+            sudo tar -xzf /tmp/deploy-bundle/backend-dist.tar.gz -C /tmp/backend-dist
             sudo rm -rf "$BACK_DIST_DIR"/*
             sudo cp -r /tmp/backend-dist/dist/. "$BACK_DIST_DIR/"
 
@@ -233,7 +250,7 @@ jobs:
 
             # 6. 清理临时文件
             sudo rm -f "$DEPLOY_ENV_FILE"
-            sudo rm -rf /tmp/backend-dist /tmp/backend-dist.tar.gz /tmp/frontend-dist.tar.gz /tmp/docker-compose.yml
+            sudo rm -rf /tmp/backend-dist /tmp/deploy-bundle /tmp/deploy-bundle.tar.gz
 
             sudo nginx -s reload
             echo "✅ 部署完成"
