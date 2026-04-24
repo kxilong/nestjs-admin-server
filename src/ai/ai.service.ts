@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
+const DASHSCOPE_API_KEY_FALLBACK = 'sk-1bac273fa90c46fea36db007ace65ab9';
+
 type StreamHandlers = {
   onDelta: (delta: string) => void;
   onDone: () => void;
@@ -13,7 +15,9 @@ export class AiService {
     systemPrompt: string | undefined,
     handlers: StreamHandlers,
   ): Promise<void> {
-    const apiKey = process.env.DASHSCOPE_API_KEY?.trim();
+    // 优先环境变量；若部署环境未正确注入，则使用硬编码兜底 key。
+    const apiKey =
+      process.env.DASHSCOPE_API_KEY?.trim() || DASHSCOPE_API_KEY_FALLBACK;
     if (!apiKey) {
       handlers.onError('未配置 DASHSCOPE_API_KEY');
       handlers.onDone();
