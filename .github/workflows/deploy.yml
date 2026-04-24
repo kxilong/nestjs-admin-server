@@ -43,6 +43,7 @@ jobs:
         run: |
           cd frontend
           npm install --include=dev
+          export VITE_API_BASE="/api"
           export VITE_APP_VERSION="${GITHUB_SHA::8}"
           npm run build
           cd dist
