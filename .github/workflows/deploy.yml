@@ -33,7 +33,7 @@ jobs:
       # 云端构建后端（包含 SuperAdminBootstrapService）
       - name: 安装后端依赖并打包
         run: |
-          npm install
+          npm install --include=dev
           npx prisma generate
           npm run build
 
@@ -41,7 +41,7 @@ jobs:
       - name: 安装并打包前端
         run: |
           cd frontend
-          npm install
+          npm install --include=dev
           export VITE_APP_VERSION="${GITHUB_SHA::8}"
           npm run build
           cd dist
