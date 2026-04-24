@@ -50,28 +50,34 @@ jobs:
           cd ../..
           tar -czf deploy-bundle.tar.gz backend-dist.tar.gz frontend-dist.tar.gz docker-compose.yml
 
-      # 上传单个发布包（第1次）
-      - name: 上传发布包到服务器（第一次）
-        id: scp_first
-        uses: appleboy/scp-action@master
-        continue-on-error: true
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
-          source: 'deploy-bundle.tar.gz'
-          target: '/tmp/'
+      # 用原生 scp 上传（带重试），绕过 drone-scp 在部分机器上的 EOF 问题
+      - name: 上传发布包到服务器（原生 scp + 重试）
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_SSH_PRIVATE_KEY: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
+        run: |
+          set -e
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SERVER_SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      # 上传失败时自动重试一次（网络偶发抖动）
-      - name: 上传发布包到服务器（重试）
-        if: steps.scp_first.outcome == 'failure'
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
-          source: 'deploy-bundle.tar.gz'
-          target: '/tmp/'
+          ok=0
+          for i in 1 2 3 4 5; do
+            echo "scp attempt: $i"
+            if scp -i ~/.ssh/id_rsa -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=yes \
+              deploy-bundle.tar.gz "${SERVER_USER}@${SERVER_HOST}:/tmp/deploy-bundle.tar.gz"; then
+              ok=1
+              break
+            fi
+            sleep $((i * 6))
+          done
+
+          if [ "$ok" -ne 1 ]; then
+            echo "ERROR: scp upload failed after retries"
+            exit 1
+          fi
 
       - name: 部署前后端
         uses: appleboy/ssh-action@master
