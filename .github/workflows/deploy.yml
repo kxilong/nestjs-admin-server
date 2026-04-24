@@ -162,8 +162,12 @@ jobs:
             exit 1
           fi
 
-          # 安装/更新容器内生产依赖，避免新增依赖导致运行时缺包
-          sudo docker exec "$CONTAINER_ID" sh -lc "corepack enable && corepack prepare pnpm@latest --activate && pnpm config set registry https://registry.npmmirror.com && cd /app && pnpm install --prod --frozen-lockfile"
+          # 先同步依赖清单到容器，再安装/更新生产依赖，避免新增依赖导致运行时缺包
+          sudo docker cp /tmp/backend-dist/package.json "$CONTAINER_ID:/app/package.json"
+          if [ -f /tmp/backend-dist/pnpm-lock.yaml ]; then
+            sudo docker cp /tmp/backend-dist/pnpm-lock.yaml "$CONTAINER_ID:/app/pnpm-lock.yaml"
+          fi
+          sudo docker exec "$CONTAINER_ID" sh -lc "corepack enable && corepack prepare pnpm@latest --activate && pnpm config set registry https://registry.npmmirror.com && cd /app && if [ -f pnpm-lock.yaml ]; then pnpm install --prod --frozen-lockfile; else pnpm install --prod --no-frozen-lockfile; fi"
           sudo docker cp /tmp/backend-dist/dist/. "$CONTAINER_ID:/app/dist/"
           sudo docker restart "$CONTAINER_ID" > /dev/null
           sudo chown -R www:www "$APP_DIR/frontend" || true
