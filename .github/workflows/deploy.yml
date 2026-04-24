@@ -30,22 +30,29 @@ jobs:
         with:
           node-version: 22
 
+      - name: 配置 pnpm 与镜像源
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+          pnpm config set registry https://registry.npmmirror.com
+
       # 云端构建后端（包含 SuperAdminBootstrapService）
       - name: 安装后端依赖并打包
         run: |
-          npm install --include=dev
-          npx prisma generate
-          npm run build
-          tar -czf backend-dist.tar.gz dist package.json package-lock.json
+          pnpm install --frozen-lockfile
+          pnpm exec prisma generate
+          pnpm run build
+          tar -czf backend-dist.tar.gz dist package.json pnpm-lock.yaml
 
       # 云端构建前端
       - name: 安装并打包前端
         run: |
           cd frontend
-          npm install --include=dev
+          pnpm config set registry https://registry.npmmirror.com
+          pnpm install --frozen-lockfile
           export VITE_API_BASE="/api"
           export VITE_APP_VERSION="${GITHUB_SHA::8}"
-          npm run build
+          pnpm run build
           cd dist
           tar -czf ../../frontend-dist.tar.gz *
           cd ../..
@@ -134,8 +141,8 @@ jobs:
           sudo rm -rf "$BACK_DIST_DIR"/*
           sudo cp -r /tmp/backend-dist/dist/. "$BACK_DIST_DIR/"
           sudo cp /tmp/backend-dist/package.json "$APP_DIR/package.json"
-          if [ -f /tmp/backend-dist/package-lock.json ]; then
-            sudo cp /tmp/backend-dist/package-lock.json "$APP_DIR/package-lock.json"
+          if [ -f /tmp/backend-dist/pnpm-lock.yaml ]; then
+            sudo cp /tmp/backend-dist/pnpm-lock.yaml "$APP_DIR/pnpm-lock.yaml"
           fi
 
           if sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" config --services | grep -qx 'redis'; then
@@ -155,7 +162,7 @@ jobs:
           fi
 
           # 安装/更新容器内生产依赖，避免新增依赖导致运行时缺包
-          sudo docker exec "$CONTAINER_ID" sh -lc "cd /app && npm install --omit=dev --force"
+          sudo docker exec "$CONTAINER_ID" sh -lc "corepack enable && corepack prepare pnpm@latest --activate && pnpm config set registry https://registry.npmmirror.com && cd /app && pnpm install --prod --frozen-lockfile"
           sudo docker cp /tmp/backend-dist/dist/. "$CONTAINER_ID:/app/dist/"
           sudo docker restart "$CONTAINER_ID" > /dev/null
           sudo chown -R www:www "$APP_DIR/frontend" || true
