@@ -36,7 +36,7 @@ jobs:
           npm install --include=dev
           npx prisma generate
           npm run build
-          tar -czf backend-dist.tar.gz dist
+          tar -czf backend-dist.tar.gz dist package.json package-lock.json
 
       # 云端构建前端
       - name: 安装并打包前端
@@ -133,6 +133,10 @@ jobs:
           sudo tar -xzf /tmp/deploy-bundle/backend-dist.tar.gz -C /tmp/backend-dist
           sudo rm -rf "$BACK_DIST_DIR"/*
           sudo cp -r /tmp/backend-dist/dist/. "$BACK_DIST_DIR/"
+          sudo cp /tmp/backend-dist/package.json "$APP_DIR/package.json"
+          if [ -f /tmp/backend-dist/package-lock.json ]; then
+            sudo cp /tmp/backend-dist/package-lock.json "$APP_DIR/package-lock.json"
+          fi
 
           if sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" config --services | grep -qx 'redis'; then
             sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d redis db
@@ -150,6 +154,8 @@ jobs:
             exit 1
           fi
 
+          # 安装/更新容器内生产依赖，避免新增依赖导致运行时缺包
+          sudo docker exec "$CONTAINER_ID" sh -lc "cd /app && npm install --omit=dev --force"
           sudo docker cp /tmp/backend-dist/dist/. "$CONTAINER_ID:/app/dist/"
           sudo docker restart "$CONTAINER_ID" > /dev/null
           sudo chown -R www:www "$APP_DIR/frontend" || true
