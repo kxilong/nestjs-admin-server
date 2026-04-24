@@ -104,8 +104,13 @@ jobs:
             sudo rm -rf "$BACK_DIST_DIR"/*
             sudo cp -r /tmp/dist/. "$BACK_DIST_DIR/"
 
-            # 2.1 先确保数据库容器可用（避免 app 启动时 Prisma P1001）
-            sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d redis db
+            # 2.1 先确保依赖容器可用（兼容旧 compose：可能没有 redis 服务）
+            if sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" config --services | grep -qx 'redis'; then
+              sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d redis db
+            else
+              echo "compose 中未定义 redis 服务，跳过 redis 启动，仅启动 db"
+              sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d db
+            fi
             DB_CONTAINER_ID="$(sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" ps -q db | head -n 1)"
             if [ -z "$DB_CONTAINER_ID" ]; then
               DB_CONTAINER_ID="$(sudo docker ps -aq --filter name=postgres-db | head -n 1)"
