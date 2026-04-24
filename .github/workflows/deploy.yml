@@ -36,6 +36,7 @@ jobs:
           npm install --include=dev
           npx prisma generate
           npm run build
+          tar -czf backend-dist.tar.gz dist
 
       # 云端构建前端
       - name: 安装并打包前端
@@ -55,7 +56,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
-          source: 'dist/,frontend-dist.tar.gz'
+          source: 'backend-dist.tar.gz,frontend-dist.tar.gz,docker-compose.yml'
           target: '/tmp/'
 
       - name: 部署前后端
@@ -88,6 +89,9 @@ jobs:
             NODE_ENV=${NODE_ENV}
             EOF"
 
+            # 0.1 同步 compose 文件，避免仓库与服务器配置漂移
+            sudo cp /tmp/docker-compose.yml "$APP_DIR/docker-compose.yml"
+
             # 0. 准备目录
             sudo mkdir -p "$FRONT_DIST_DIR" "$BACK_DIST_DIR"
 
@@ -101,8 +105,11 @@ jobs:
             fi
 
             # 2. 更新服务器上的后端 dist 目录（便于直接看到已更新）
+            sudo rm -rf /tmp/backend-dist
+            sudo mkdir -p /tmp/backend-dist
+            sudo tar -xzf /tmp/backend-dist.tar.gz -C /tmp/backend-dist
             sudo rm -rf "$BACK_DIST_DIR"/*
-            sudo cp -r /tmp/dist/. "$BACK_DIST_DIR/"
+            sudo cp -r /tmp/backend-dist/dist/. "$BACK_DIST_DIR/"
 
             # 2.1 先确保依赖容器可用（兼容旧 compose：可能没有 redis 服务）
             if sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" config --services | grep -qx 'redis'; then
@@ -195,7 +202,7 @@ jobs:
               fi
             fi
 
-            sudo docker cp /tmp/dist/. "$CONTAINER_ID:/app/dist/"
+            sudo docker cp /tmp/backend-dist/dist/. "$CONTAINER_ID:/app/dist/"
             sudo docker restart "$CONTAINER_ID" > /dev/null
             echo "已通过 Docker 容器发布后端：$CONTAINER_ID"
             echo "后端自检：3000端口监听情况"
@@ -226,7 +233,7 @@ jobs:
 
             # 6. 清理临时文件
             sudo rm -f "$DEPLOY_ENV_FILE"
-            sudo rm -rf /tmp/dist /tmp/frontend-dist.tar.gz
+            sudo rm -rf /tmp/backend-dist /tmp/backend-dist.tar.gz /tmp/frontend-dist.tar.gz /tmp/docker-compose.yml
 
             sudo nginx -s reload
             echo "✅ 部署完成"
