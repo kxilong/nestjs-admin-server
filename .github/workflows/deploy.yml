@@ -79,7 +79,192 @@ jobs:
             exit 1
           fi
 
-      - name: 部署前后端
+      - name: 部署前后端（第一次）
+        id: ssh_deploy_first
+        uses: appleboy/ssh-action@master
+        continue-on-error: true
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
+          envs: APP_DIR,DATABASE_URL,REDIS_HOST,REDIS_PORT,JWT_ACCESS_SECRET,JWT_REFRESH_SECRET,JWT_ACCESS_EXPIRES_IN,JWT_REFRESH_EXPIRES_IN,DASHSCOPE_API_KEY,AI_MODEL,DASHSCOPE_BASE_URL,THROTTLE_LIMIT,NODE_ENV
+          script: |
+            set -e
+
+            APP_DIR="/home/ubuntu/nestjs-admin-server"
+            FRONT_DIST_DIR="$APP_DIR/frontend/dist"
+            ALT_FRONT_DIST_DIR="/www/wwwroot/frontend/dist"
+            BACK_DIST_DIR="$APP_DIR/dist"
+            DEPLOY_ENV_FILE="/tmp/nestjs-admin-deploy.env"
+            sudo rm -rf /tmp/deploy-bundle
+            sudo mkdir -p /tmp/deploy-bundle
+            sudo tar -xzf /tmp/deploy-bundle.tar.gz -C /tmp/deploy-bundle
+            sudo sh -c "cat > \"$DEPLOY_ENV_FILE\" <<'EOF'
+            DATABASE_URL=${DATABASE_URL}
+            REDIS_HOST=${REDIS_HOST}
+            REDIS_PORT=${REDIS_PORT}
+            JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
+            JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+            JWT_ACCESS_EXPIRES_IN=${JWT_ACCESS_EXPIRES_IN}
+            JWT_REFRESH_EXPIRES_IN=${JWT_REFRESH_EXPIRES_IN}
+            DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+            AI_MODEL=${AI_MODEL}
+            DASHSCOPE_BASE_URL=${DASHSCOPE_BASE_URL}
+            THROTTLE_LIMIT=${THROTTLE_LIMIT}
+            NODE_ENV=${NODE_ENV}
+            EOF"
+
+            # 0.1 同步 compose 文件，避免仓库与服务器配置漂移
+            sudo cp /tmp/deploy-bundle/docker-compose.yml "$APP_DIR/docker-compose.yml"
+
+            # 0. 准备目录
+            sudo mkdir -p "$FRONT_DIST_DIR" "$BACK_DIST_DIR"
+
+            # 1. 更新服务器上的前端目录（你在面板看到的目录）
+            sudo rm -rf "$FRONT_DIST_DIR"/*
+            sudo tar -xzf /tmp/deploy-bundle/frontend-dist.tar.gz -C "$FRONT_DIST_DIR"
+            # 兼容宝塔常见站点目录（若存在则同步一份，避免 Nginx 指向旧目录）
+            if [ -d "$ALT_FRONT_DIST_DIR" ]; then
+              sudo rm -rf "$ALT_FRONT_DIST_DIR"/*
+              sudo tar -xzf /tmp/deploy-bundle/frontend-dist.tar.gz -C "$ALT_FRONT_DIST_DIR"
+            fi
+
+            # 2. 更新服务器上的后端 dist 目录（便于直接看到已更新）
+            sudo rm -rf /tmp/backend-dist
+            sudo mkdir -p /tmp/backend-dist
+            sudo tar -xzf /tmp/deploy-bundle/backend-dist.tar.gz -C /tmp/backend-dist
+            sudo rm -rf "$BACK_DIST_DIR"/*
+            sudo cp -r /tmp/backend-dist/dist/. "$BACK_DIST_DIR/"
+
+            # 2.1 先确保依赖容器可用（兼容旧 compose：可能没有 redis 服务）
+            if sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" config --services | grep -qx 'redis'; then
+              sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d redis db
+            else
+              echo "compose 中未定义 redis 服务，跳过 redis 启动，仅启动 db"
+              sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d db
+            fi
+            DB_CONTAINER_ID="$(sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" ps -q db | head -n 1)"
+            if [ -z "$DB_CONTAINER_ID" ]; then
+              DB_CONTAINER_ID="$(sudo docker ps -aq --filter name=postgres-db | head -n 1)"
+            fi
+            if [ -z "$DB_CONTAINER_ID" ]; then
+              echo "错误：未找到数据库容器（db/postgres-db），部署终止。"
+              sudo docker ps -a || true
+              exit 1
+            fi
+            echo "等待数据库健康检查通过..."
+            DB_OK=false
+            for i in $(seq 1 30); do
+              DB_HEALTH="$(sudo docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$DB_CONTAINER_ID" 2>/dev/null || echo unknown)"
+              DB_RUNNING="$(sudo docker inspect -f '{{.State.Running}}' "$DB_CONTAINER_ID" 2>/dev/null || echo false)"
+              if [ "$DB_RUNNING" = "true" ] && { [ "$DB_HEALTH" = "healthy" ] || [ "$DB_HEALTH" = "none" ]; }; then
+                DB_OK=true
+                break
+              fi
+              sleep 2
+            done
+            if [ "$DB_OK" != "true" ]; then
+              echo "错误：数据库容器未就绪（running/healthy），部署终止。"
+              sudo docker logs --tail 120 "$DB_CONTAINER_ID" || true
+              exit 1
+            fi
+
+            # 2.1 强制 Docker 接管 3000 端口（清理 PM2/旧进程占用）
+            if sudo ss -ltnp | awk '/:3000/' | grep -Eq 'PM2|node'; then
+              echo "检测到 PM2/Node 占用 3000，先停止 PM2..."
+              if command -v pm2 >/dev/null 2>&1; then
+                pm2 delete all || true
+                pm2 kill || true
+              fi
+              sudo fuser -k 3000/tcp || true
+            fi
+
+            # 3. 仅使用 Docker：定位后端容器并发布
+            CONTAINER_ID="$(sudo docker ps -q --filter name=nestjs-app | head -n 1)"
+            if [ -z "$CONTAINER_ID" ]; then
+              CONTAINER_ID="$(sudo docker ps -aq --filter name=nestjs-app | head -n 1)"
+            fi
+            if [ -z "$CONTAINER_ID" ]; then
+              CONTAINER_ID="$(sudo docker ps -q --filter label=com.docker.compose.service=app | head -n 1)"
+            fi
+            if [ -z "$CONTAINER_ID" ]; then
+              CONTAINER_ID="$(sudo docker ps -aq --filter label=com.docker.compose.service=app | head -n 1)"
+            fi
+            if [ -z "$CONTAINER_ID" ]; then
+              echo "未找到后端容器，尝试通过 docker compose 拉起 app..."
+              if ! sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d --build app; then
+                echo "首次拉起 app 失败，尝试释放 3000 端口后重试..."
+                PORT_CONFLICT_CONTAINERS="$(sudo docker ps -q --filter publish=3000)"
+                if [ -n "$PORT_CONFLICT_CONTAINERS" ]; then
+                  for CID in $PORT_CONFLICT_CONTAINERS; do
+                    echo "停止占用 3000 端口的容器: $CID"
+                    sudo docker stop "$CID" || true
+                  done
+                fi
+                sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" up -d --build app
+              fi
+              CONTAINER_ID="$(sudo docker compose --env-file "$DEPLOY_ENV_FILE" -f "$APP_DIR/docker-compose.yml" ps -q app | head -n 1)"
+            fi
+            if [ -z "$CONTAINER_ID" ]; then
+              echo "错误：未找到后端 Docker 容器，且自动拉起失败，部署终止。"
+              echo "当前 3000 端口占用情况："
+              sudo ss -ltnp | awk 'NR==1 || /:3000/'
+              sudo docker ps -a || true
+              exit 1
+            fi
+
+            # 若容器当前未运行，先启动再拷贝
+            RUNNING_STATE="$(sudo docker inspect -f '{{.State.Running}}' "$CONTAINER_ID" 2>/dev/null || echo false)"
+            if [ "$RUNNING_STATE" != "true" ]; then
+              if ! sudo docker start "$CONTAINER_ID" > /dev/null; then
+                echo "容器启动失败，尝试释放 3000 端口后重试..."
+                if command -v pm2 >/dev/null 2>&1; then
+                  pm2 delete all || true
+                  pm2 kill || true
+                fi
+                sudo fuser -k 3000/tcp || true
+                sudo docker start "$CONTAINER_ID" > /dev/null
+              fi
+            fi
+
+            sudo docker cp /tmp/backend-dist/dist/. "$CONTAINER_ID:/app/dist/"
+            sudo docker restart "$CONTAINER_ID" > /dev/null
+            echo "已通过 Docker 容器发布后端：$CONTAINER_ID"
+            echo "后端自检：3000端口监听情况"
+            sudo ss -ltnp | awk 'NR==1 || /:3000/'
+            echo "后端自检：容器内 auth 补丁标记"
+            sudo docker exec "$CONTAINER_ID" node -e "const fs=require('fs');const p='/app/dist/auth/auth.service.js';if(!fs.existsSync(p)){console.log('auth.service.js not found');process.exit(0)}const s=fs.readFileSync(p,'utf8');console.log('has_parse_fallback_marker=',s.includes('格式非法，已回退默认值'));console.log('has_access_env_marker=',s.includes('JWT_ACCESS_EXPIRES_IN'));"
+
+            # 4. 前端目录权限（宝塔/nginx 常见用户）
+            sudo chown -R www:www "$APP_DIR/frontend" || true
+
+            # 5. 记录部署版本（便于排查“线上是不是最新代码”）
+            DEPLOY_TIME="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+            COMMIT_SHA="${{ github.sha }}"
+            SHORT_SHA="$(echo "$COMMIT_SHA" | cut -c1-8)"
+            {
+              echo "commit_sha=$COMMIT_SHA"
+              echo "short_sha=$SHORT_SHA"
+              echo "branch=master"
+              echo "deployed_at_utc=$DEPLOY_TIME"
+            } | sudo tee "$APP_DIR/DEPLOY_VERSION.txt" > /dev/null
+            sudo cp "$APP_DIR/DEPLOY_VERSION.txt" "$FRONT_DIST_DIR/DEPLOY_VERSION.txt"
+            sudo cp "$APP_DIR/DEPLOY_VERSION.txt" "$BACK_DIST_DIR/DEPLOY_VERSION.txt"
+            if [ -d "$ALT_FRONT_DIST_DIR" ]; then
+              sudo cp "$APP_DIR/DEPLOY_VERSION.txt" "$ALT_FRONT_DIST_DIR/DEPLOY_VERSION.txt"
+            fi
+            echo "当前部署版本："
+            sudo cat "$APP_DIR/DEPLOY_VERSION.txt"
+
+            # 6. 清理临时文件
+            sudo rm -f "$DEPLOY_ENV_FILE"
+            sudo rm -rf /tmp/backend-dist /tmp/deploy-bundle /tmp/deploy-bundle.tar.gz
+
+            sudo nginx -s reload
+            echo "✅ 部署完成"
+
+      - name: 部署前后端（重试）
+        if: steps.ssh_deploy_first.outcome == 'failure'
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SERVER_HOST }}
