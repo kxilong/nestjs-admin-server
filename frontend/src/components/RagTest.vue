@@ -93,7 +93,10 @@
             :key="index"
             class="match-item"
           >
-            <h4>匹配 {{ index + 1 }} (得分: {{ match.score.toFixed(2) }})</h4>
+            <h4>
+              匹配 {{ (index as number) + 1 }} (得分:
+              {{ match.score.toFixed(2) }})
+            </h4>
             <p><strong>文档:</strong> {{ match.documentName }}</p>
             <p><strong>内容:</strong> {{ match.content }}</p>
           </div>
