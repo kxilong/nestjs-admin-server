@@ -106,13 +106,13 @@ function openSwagger() {
           AI 对话
         </a-menu-item>
         <a-menu-item
-          key="/admin/rag-test"
-          @click="router.push({ name: 'admin-rag-test' })"
+          key="/admin/rag"
+          @click="router.push({ name: 'admin-rag' })"
         >
           <template #icon>
             <BookOutlined />
           </template>
-          RAG 测试
+          知识库
         </a-menu-item>
       </a-menu>
     </a-layout-sider>

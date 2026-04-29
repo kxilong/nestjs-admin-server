@@ -61,10 +61,10 @@ const router = createRouter({
           meta: { title: 'AI 对话' },
         },
         {
-          path: 'rag-test',
-          name: 'admin-rag-test',
+          path: 'rag',
+          name: 'admin-rag',
           component: () => import('@/views/RagTestView.vue'),
-          meta: { title: 'RAG 测试' },
+          meta: { title: '知识库' },
         },
       ],
     },

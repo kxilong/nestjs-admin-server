@@ -13,7 +13,10 @@ export function splitTextIntoChunks(
   }
 
   const chunkSize = Math.max(200, options.chunkSize);
-  const chunkOverlap = Math.min(Math.max(0, options.chunkOverlap), chunkSize - 1);
+  const chunkOverlap = Math.min(
+    Math.max(0, options.chunkOverlap),
+    chunkSize - 1,
+  );
   const step = Math.max(1, chunkSize - chunkOverlap);
   const chunks: string[] = [];
 
@@ -69,4 +72,47 @@ export function buildDeterministicEmbedding(
 
 export function vectorToSqlLiteral(vector: number[]): string {
   return `[${vector.join(',')}]`;
+}
+
+export async function fetchEmbedding(texts: string[]): Promise<number[][]> {
+  const apiKey =
+    process.env.DASHSCOPE_API_KEY?.trim() ||
+    'sk-1bac273fa90c46fea36db007ace65ab9';
+  const model = process.env.EMBEDDING_MODEL?.trim() || 'text-embedding-v3';
+  const dimension = Number(process.env.RAG_EMBEDDING_DIM ?? '1024') || 1024;
+
+  const apiUrl =
+    process.env.DASHSCOPE_BASE_URL?.trim()?.replace(
+      '/chat/completions',
+      '/embeddings',
+    ) || 'https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings';
+
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      input: texts,
+      dimensions: dimension,
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    throw new Error(`Embedding API 请求失败(${response.status}): ${errText}`);
+  }
+
+  const data = (await response.json()) as {
+    data: { embedding: number[]; index: number }[];
+  };
+
+  if (!data.data || data.data.length === 0) {
+    throw new Error('Embedding API 返回为空');
+  }
+
+  const sorted = data.data.sort((a, b) => a.index - b.index);
+  return sorted.map((item) => item.embedding);
 }
