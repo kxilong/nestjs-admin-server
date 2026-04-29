@@ -9,6 +9,7 @@ import {
   SettingOutlined,
   TeamOutlined,
   UserOutlined,
+  BookOutlined,
 } from '@ant-design/icons-vue';
 import { API_BASE } from '@/config';
 import { useAuth } from '@/composables/useAuth';
@@ -20,9 +21,7 @@ const { user, logout, can } = useAuth();
 
 const selectedKeys = computed(() => [route.path]);
 
-const pageTitle = computed(
-  () => (route.meta.title as string) ?? '管理后台',
-);
+const pageTitle = computed(() => (route.meta.title as string) ?? '管理后台');
 
 async function onLogout() {
   await logout();
@@ -38,11 +37,7 @@ function openSwagger() {
   <a-layout class="admin-root">
     <a-layout-sider v-model:collapsed="collapsed" collapsible theme="dark">
       <div class="logo">Admin</div>
-      <a-menu
-        theme="dark"
-        mode="inline"
-        :selected-keys="selectedKeys"
-      >
+      <a-menu theme="dark" mode="inline" :selected-keys="selectedKeys">
         <a-menu-item
           key="/admin/dashboard"
           @click="router.push({ name: 'admin-dashboard' })"
@@ -109,6 +104,15 @@ function openSwagger() {
             <RobotOutlined />
           </template>
           AI 对话
+        </a-menu-item>
+        <a-menu-item
+          key="/admin/rag-test"
+          @click="router.push({ name: 'admin-rag-test' })"
+        >
+          <template #icon>
+            <BookOutlined />
+          </template>
+          RAG 测试
         </a-menu-item>
       </a-menu>
     </a-layout-sider>

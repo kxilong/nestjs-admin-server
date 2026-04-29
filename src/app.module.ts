@@ -20,6 +20,8 @@ import { SuperAdminBootstrapService } from './bootstrap/super-admin-bootstrap.se
 import { RedisModule } from './redis/redis.module';
 import { AiController } from './ai/ai.controller';
 import { AiService } from './ai/ai.service';
+import { RagController } from './rag/rag.controller';
+import { RagService } from './rag/rag.service';
 
 @Module({
   imports: [
@@ -42,6 +44,7 @@ import { AiService } from './ai/ai.service';
     PermissionController,
     UserController,
     AiController,
+    RagController,
   ],
   providers: [
     AppService,
@@ -56,6 +59,7 @@ import { AiService } from './ai/ai.service';
     PermissionsGuard,
     SuperAdminBootstrapService,
     AiService,
+    RagService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })

@@ -60,6 +60,12 @@ const router = createRouter({
           component: () => import('@/views/AiChatView.vue'),
           meta: { title: 'AI 对话' },
         },
+        {
+          path: 'rag-test',
+          name: 'admin-rag-test',
+          component: () => import('@/views/RagTestView.vue'),
+          meta: { title: 'RAG 测试' },
+        },
       ],
     },
     {
